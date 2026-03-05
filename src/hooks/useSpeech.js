@@ -7,45 +7,54 @@ export function useSpeech() {
 
   useEffect(() => {
     setSupported("speechSynthesis" in window);
+    // Pre-load voices
+    if ("speechSynthesis" in window) window.speechSynthesis.getVoices();
   }, []);
 
   const speak = useCallback((text, options = {}) => {
-    if (!("speechSynthesis" in window)) return;
-
-    // Cancela qualquer fala em andamento
+    if (!("speechSynthesis" in window) || !text) return;
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utteranceRef.current = utterance;
+    // Small delay so cancel() takes effect on mobile
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utteranceRef.current = utterance;
 
-    // Configurações de voz
-    utterance.lang = options.lang || "en-US";
-    utterance.rate = options.rate || 0.85;
-    utterance.pitch = options.pitch || 1;
-    utterance.volume = options.volume || 1;
+      const targetLang = options.lang || "en-US";
+      utterance.lang = targetLang;
+      utterance.rate = options.rate || 0.85;
+      utterance.pitch = options.pitch || 1;
+      utterance.volume = 1;
 
-    // Tenta encontrar uma voz em inglês
-    const loadVoice = () => {
+      const applyVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        // Find best matching voice for requested language
+        const voice =
+          voices.find(v => v.lang === targetLang && v.localService) ||
+          voices.find(v => v.lang === targetLang) ||
+          voices.find(v => v.lang.startsWith(targetLang.split("-")[0]) && v.localService) ||
+          voices.find(v => v.lang.startsWith(targetLang.split("-")[0])) ||
+          voices[0];
+        if (voice) utterance.voice = voice;
+      };
+
       const voices = window.speechSynthesis.getVoices();
-      const enVoice =
-        voices.find((v) => v.lang === "en-US" && v.localService) ||
-        voices.find((v) => v.lang.startsWith("en-US")) ||
-        voices.find((v) => v.lang.startsWith("en")) ||
-        voices[0];
-      if (enVoice) utterance.voice = enVoice;
-    };
-
-    if (window.speechSynthesis.getVoices().length > 0) {
-      loadVoice();
-    } else {
-      window.speechSynthesis.onvoiceschanged = loadVoice;
-    }
-
-    utterance.onstart = () => setSpeaking(true);
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
+      if (voices.length > 0) {
+        applyVoice();
+        utterance.onstart = () => setSpeaking(true);
+        utterance.onend = () => setSpeaking(false);
+        utterance.onerror = () => setSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+      } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+          applyVoice();
+          utterance.onstart = () => setSpeaking(true);
+          utterance.onend = () => setSpeaking(false);
+          utterance.onerror = () => setSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+        };
+      }
+    }, 100);
   }, []);
 
   const stop = useCallback(() => {
