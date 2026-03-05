@@ -3,11 +3,9 @@ import { useState, useCallback, useEffect, useRef } from "react";
 export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const [supported, setSupported] = useState(false);
-  const utteranceRef = useRef(null);
 
   useEffect(() => {
     setSupported("speechSynthesis" in window);
-    // Pre-load voices
     if ("speechSynthesis" in window) window.speechSynthesis.getVoices();
   }, []);
 
@@ -15,46 +13,61 @@ export function useSpeech() {
     if (!("speechSynthesis" in window) || !text) return;
     window.speechSynthesis.cancel();
 
-    // Small delay so cancel() takes effect on mobile
     setTimeout(() => {
       const utterance = new SpeechSynthesisUtterance(text);
-      utteranceRef.current = utterance;
-
       const targetLang = options.lang || "en-US";
-      utterance.lang = targetLang;
-      utterance.rate = options.rate || 0.85;
-      utterance.pitch = options.pitch || 1;
-      utterance.volume = 1;
+      const isPortuguese = targetLang.startsWith("pt");
 
-      const applyVoice = () => {
+      utterance.lang = targetLang;
+      // Natural rate — not too slow, not too fast
+      utterance.rate = options.rate || (isPortuguese ? 0.95 : 0.90);
+      utterance.pitch = 1.0;   // Natural pitch, no distortion
+      utterance.volume = 1.0;
+
+      const applyBestVoice = () => {
         const voices = window.speechSynthesis.getVoices();
-        // Find best matching voice for requested language
-        const voice =
-          voices.find(v => v.lang === targetLang && v.localService) ||
-          voices.find(v => v.lang === targetLang) ||
-          voices.find(v => v.lang.startsWith(targetLang.split("-")[0]) && v.localService) ||
-          voices.find(v => v.lang.startsWith(targetLang.split("-")[0])) ||
-          voices[0];
-        if (voice) utterance.voice = voice;
+        const langCode = targetLang.split("-")[0]; // "en" or "pt"
+
+        // Priority: natural/premium online voices first, then local
+        const preferred = isPortuguese
+          ? ["Google português do Brasil", "Microsoft Francisca", "Luciana", "Google português"]
+          : ["Google US English", "Microsoft Aria", "Microsoft Jenny", "Samantha", "Karen", "Google UK English Female"];
+
+        // Try preferred voices by name
+        let voice = null;
+        for (const name of preferred) {
+          voice = voices.find(v => v.name.includes(name));
+          if (voice) break;
+        }
+
+        // Fallback: any voice matching the language
+        if (!voice) {
+          voice = voices.find(v => v.lang === targetLang && !v.name.toLowerCase().includes("compact")) ||
+                  voices.find(v => v.lang.startsWith(langCode) && !v.name.toLowerCase().includes("compact")) ||
+                  voices.find(v => v.lang.startsWith(langCode)) ||
+                  voices[0];
+        }
+
+        if (voice) {
+          utterance.voice = voice;
+          // Adjust rate per voice type
+          if (voice.name.includes("Google")) utterance.rate = isPortuguese ? 0.90 : 0.85;
+        }
       };
 
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
-        applyVoice();
-        utterance.onstart = () => setSpeaking(true);
-        utterance.onend = () => setSpeaking(false);
-        utterance.onerror = () => setSpeaking(false);
-        window.speechSynthesis.speak(utterance);
+        applyBestVoice();
       } else {
-        window.speechSynthesis.onvoiceschanged = () => {
-          applyVoice();
-          utterance.onstart = () => setSpeaking(true);
-          utterance.onend = () => setSpeaking(false);
-          utterance.onerror = () => setSpeaking(false);
-          window.speechSynthesis.speak(utterance);
-        };
+        window.speechSynthesis.onvoiceschanged = applyBestVoice;
       }
-    }, 100);
+
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+    }, 120);
   }, []);
 
   const stop = useCallback(() => {
