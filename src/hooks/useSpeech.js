@@ -1,12 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 
-// Usa OpenAI TTS — voz humana de verdade
-async function speakWithOpenAI(text, lang, apiKey) {
-  // Escolhe voz conforme idioma
-  // nova = feminina natural (ótima para EN e PT)
-  // onyx = masculina grave (boa para EN)
-  const voice = lang.startsWith("pt") ? "nova" : "nova";
-
+async function speakOpenAI(text, lang, apiKey) {
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: {
@@ -14,34 +8,31 @@ async function speakWithOpenAI(text, lang, apiKey) {
       "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "tts-1",       // tts-1-hd = qualidade máxima (mais lento)
+      model: "tts-1",
       input: text,
-      voice: voice,
+      voice: "nova",
       speed: lang.startsWith("pt") ? 0.95 : 0.90,
     }),
   });
-
   if (!response.ok) throw new Error("TTS failed");
-
   const blob = await response.blob();
   return URL.createObjectURL(blob);
 }
 
-// Fallback: voz do navegador (sem key)
-function speakBrowser(text, lang, rate = 0.90) {
+function speakBrowser(text, lang) {
   return new Promise((resolve) => {
+    if (!("speechSynthesis" in window)) return resolve();
+    window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang;
-    utterance.rate = rate;
+    utterance.rate = 0.90;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
-
     const voices = window.speechSynthesis.getVoices();
     const langCode = lang.split("-")[0];
     const preferred = lang.startsWith("pt")
       ? ["Google português do Brasil", "Luciana", "Microsoft Francisca"]
       : ["Google US English", "Samantha", "Microsoft Aria", "Karen"];
-
     let voice = null;
     for (const name of preferred) {
       voice = voices.find(v => v.name.includes(name));
@@ -49,7 +40,6 @@ function speakBrowser(text, lang, rate = 0.90) {
     }
     if (!voice) voice = voices.find(v => v.lang.startsWith(langCode)) || voices[0];
     if (voice) utterance.voice = voice;
-
     utterance.onend = resolve;
     utterance.onerror = resolve;
     window.speechSynthesis.speak(utterance);
@@ -59,56 +49,71 @@ function speakBrowser(text, lang, rate = 0.90) {
 export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const audioRef = useRef(null);
+  // Expõe se está falando para o intérprete pausar o microfone
+  const speakingRef = useRef(false);
 
   const speak = useCallback(async (text, options = {}) => {
     if (!text) return;
     const lang = options.lang || "en-US";
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY || "";
 
-    // Para áudio anterior
+    // Para tudo que estava tocando
     if (audioRef.current) {
       audioRef.current.pause();
-      URL.revokeObjectURL(audioRef.current.src);
+      try { URL.revokeObjectURL(audioRef.current.src); } catch {}
       audioRef.current = null;
     }
     window.speechSynthesis?.cancel();
+
     setSpeaking(true);
+    speakingRef.current = true;
+
+    const done = () => {
+      setSpeaking(false);
+      speakingRef.current = false;
+    };
 
     try {
       if (apiKey) {
-        // 🌟 OpenAI TTS — voz humana natural
-        const url = await speakWithOpenAI(text, lang, apiKey);
+        const url = await speakOpenAI(text, lang, apiKey);
         const audio = new Audio(url);
         audioRef.current = audio;
-        audio.onended = () => {
-          setSpeaking(false);
-          URL.revokeObjectURL(url);
+        // Garante volume máximo
+        audio.volume = 1.0;
+        audio.onended = () => { done(); try { URL.revokeObjectURL(url); } catch {} };
+        audio.onerror = (e) => {
+          console.error("Audio error:", e);
+          // Fallback para voz do navegador
+          speakBrowser(text, lang).then(done);
         };
-        audio.onerror = () => setSpeaking(false);
-        await audio.play();
+        // Toca — alguns browsers exigem interação prévia do usuário
+        const playPromise = audio.play();
+        if (playPromise) {
+          playPromise.catch(() => {
+            // Se bloqueado pelo browser, usa voz do sistema
+            speakBrowser(text, lang).then(done);
+          });
+        }
       } else {
-        // Fallback navegador
-        await speakBrowser(text, lang, options.rate);
-        setSpeaking(false);
+        await speakBrowser(text, lang);
+        done();
       }
     } catch {
-      // Se OpenAI falhar, tenta navegador
-      try {
-        await speakBrowser(text, lang, options.rate);
-      } catch {}
-      setSpeaking(false);
+      try { await speakBrowser(text, lang); } catch {}
+      done();
     }
   }, []);
 
   const stop = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
-      URL.revokeObjectURL(audioRef.current.src);
+      try { URL.revokeObjectURL(audioRef.current.src); } catch {}
       audioRef.current = null;
     }
     window.speechSynthesis?.cancel();
     setSpeaking(false);
+    speakingRef.current = false;
   }, []);
 
-  return { speak, stop, speaking, supported: true };
+  return { speak, stop, speaking, speakingRef, supported: true };
 }
