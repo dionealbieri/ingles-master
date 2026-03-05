@@ -336,7 +336,8 @@ export default function App() {
               onClick={() => setShowLogoutConfirm(false)}
               style={{ position: "fixed", inset: 0, background: "#000000aa", zIndex: 50 }} />
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "90%", maxWidth: 360, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: 28, zIndex: 51, textAlign: "center" }}>
+              style={{ position: "fixed", inset: 0, zIndex: 51, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", pointerEvents: "none" }}>
+              <div style={{ width: "100%", maxWidth: 360, background: t.surface, border: `1px solid ${t.border}`, borderRadius: 16, padding: 28, textAlign: "center", pointerEvents: "all" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>🚪</div>
               <h3 style={{ fontSize: 20, color: t.text, fontWeight: 700, marginBottom: 8 }}>Sair do app?</h3>
               <p style={{ color: t.textMuted, fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
@@ -345,13 +346,14 @@ export default function App() {
               </p>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setShowLogoutConfirm(false)}
-                  style={{ flex: 1, padding: "12px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface2, color: t.text, fontSize: 15, cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>
+                  style={{ flex: 1, padding: "14px", borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface2, color: t.text, fontSize: 16, cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>
                   Cancelar
                 </button>
                 <button onClick={handleLogout}
-                  style={{ flex: 1, padding: "12px", borderRadius: 10, border: "none", background: "#f87171", color: "#fff", fontSize: 15, cursor: "pointer", fontFamily: "inherit", fontWeight: 700 }}>
+                  style={{ flex: 1, padding: "14px", borderRadius: 10, border: "none", background: "#f87171", color: "#fff", fontSize: 16, cursor: "pointer", fontFamily: "inherit", fontWeight: 700 }}>
                   Sair
                 </button>
+              </div>
               </div>
             </motion.div>
           </>
