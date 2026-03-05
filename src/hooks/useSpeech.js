@@ -1,81 +1,114 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
+
+// Usa OpenAI TTS — voz humana de verdade
+async function speakWithOpenAI(text, lang, apiKey) {
+  // Escolhe voz conforme idioma
+  // nova = feminina natural (ótima para EN e PT)
+  // onyx = masculina grave (boa para EN)
+  const voice = lang.startsWith("pt") ? "nova" : "nova";
+
+  const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "tts-1",       // tts-1-hd = qualidade máxima (mais lento)
+      input: text,
+      voice: voice,
+      speed: lang.startsWith("pt") ? 0.95 : 0.90,
+    }),
+  });
+
+  if (!response.ok) throw new Error("TTS failed");
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+// Fallback: voz do navegador (sem key)
+function speakBrowser(text, lang, rate = 0.90) {
+  return new Promise((resolve) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.rate = rate;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const voices = window.speechSynthesis.getVoices();
+    const langCode = lang.split("-")[0];
+    const preferred = lang.startsWith("pt")
+      ? ["Google português do Brasil", "Luciana", "Microsoft Francisca"]
+      : ["Google US English", "Samantha", "Microsoft Aria", "Karen"];
+
+    let voice = null;
+    for (const name of preferred) {
+      voice = voices.find(v => v.name.includes(name));
+      if (voice) break;
+    }
+    if (!voice) voice = voices.find(v => v.lang.startsWith(langCode)) || voices[0];
+    if (voice) utterance.voice = voice;
+
+    utterance.onend = resolve;
+    utterance.onerror = resolve;
+    window.speechSynthesis.speak(utterance);
+  });
+}
 
 export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
-  const [supported, setSupported] = useState(false);
+  const audioRef = useRef(null);
 
-  useEffect(() => {
-    setSupported("speechSynthesis" in window);
-    if ("speechSynthesis" in window) window.speechSynthesis.getVoices();
-  }, []);
+  const speak = useCallback(async (text, options = {}) => {
+    if (!text) return;
+    const lang = options.lang || "en-US";
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY || "";
 
-  const speak = useCallback((text, options = {}) => {
-    if (!("speechSynthesis" in window) || !text) return;
-    window.speechSynthesis.cancel();
+    // Para áudio anterior
+    if (audioRef.current) {
+      audioRef.current.pause();
+      URL.revokeObjectURL(audioRef.current.src);
+      audioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    setSpeaking(true);
 
-    setTimeout(() => {
-      const utterance = new SpeechSynthesisUtterance(text);
-      const targetLang = options.lang || "en-US";
-      const isPortuguese = targetLang.startsWith("pt");
-
-      utterance.lang = targetLang;
-      // Natural rate — not too slow, not too fast
-      utterance.rate = options.rate || (isPortuguese ? 0.95 : 0.90);
-      utterance.pitch = 1.0;   // Natural pitch, no distortion
-      utterance.volume = 1.0;
-
-      const applyBestVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const langCode = targetLang.split("-")[0]; // "en" or "pt"
-
-        // Priority: natural/premium online voices first, then local
-        const preferred = isPortuguese
-          ? ["Google português do Brasil", "Microsoft Francisca", "Luciana", "Google português"]
-          : ["Google US English", "Microsoft Aria", "Microsoft Jenny", "Samantha", "Karen", "Google UK English Female"];
-
-        // Try preferred voices by name
-        let voice = null;
-        for (const name of preferred) {
-          voice = voices.find(v => v.name.includes(name));
-          if (voice) break;
-        }
-
-        // Fallback: any voice matching the language
-        if (!voice) {
-          voice = voices.find(v => v.lang === targetLang && !v.name.toLowerCase().includes("compact")) ||
-                  voices.find(v => v.lang.startsWith(langCode) && !v.name.toLowerCase().includes("compact")) ||
-                  voices.find(v => v.lang.startsWith(langCode)) ||
-                  voices[0];
-        }
-
-        if (voice) {
-          utterance.voice = voice;
-          // Adjust rate per voice type
-          if (voice.name.includes("Google")) utterance.rate = isPortuguese ? 0.90 : 0.85;
-        }
-      };
-
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        applyBestVoice();
+    try {
+      if (apiKey) {
+        // 🌟 OpenAI TTS — voz humana natural
+        const url = await speakWithOpenAI(text, lang, apiKey);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => {
+          setSpeaking(false);
+          URL.revokeObjectURL(url);
+        };
+        audio.onerror = () => setSpeaking(false);
+        await audio.play();
       } else {
-        window.speechSynthesis.onvoiceschanged = applyBestVoice;
+        // Fallback navegador
+        await speakBrowser(text, lang, options.rate);
+        setSpeaking(false);
       }
-
-      utterance.onstart = () => setSpeaking(true);
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
-
-      window.speechSynthesis.speak(utterance);
-    }, 120);
-  }, []);
-
-  const stop = useCallback(() => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+    } catch {
+      // Se OpenAI falhar, tenta navegador
+      try {
+        await speakBrowser(text, lang, options.rate);
+      } catch {}
       setSpeaking(false);
     }
   }, []);
 
-  return { speak, stop, speaking, supported };
+  const stop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      URL.revokeObjectURL(audioRef.current.src);
+      audioRef.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
+  }, []);
+
+  return { speak, stop, speaking, supported: true };
 }
