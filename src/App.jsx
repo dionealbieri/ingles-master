@@ -18,6 +18,7 @@ import { generateLesson } from "./lessonService.js";
 import { storage } from "./utils/storage.js";
 import { createCard } from "./utils/spacedRepetition.js";
 import { useTheme } from "./hooks/useTheme.js";
+import { Settings, useSettings } from "./components/Settings.jsx";
 
 const TABS_GROUPED = [
   {
@@ -43,6 +44,7 @@ const TABS_GROUPED = [
     items: [
       { id: "dictionary",   icon: "🌐", label: "Dicionário" },
       { id: "progress",     icon: "📊", label: "Meu Progresso" },
+      { id: "settings",     icon: "⚙️",  label: "Configurações" },
     ]
   },
 ];
@@ -69,6 +71,7 @@ function scheduleReminder() {
 
 export default function App() {
   const { theme: t, isDark, toggle: toggleTheme } = useTheme();
+  const { settings, update: updateSetting, reset: resetSettings } = useSettings();
   const [tab, setTab] = useState("lesson");
   const [level, setLevel] = useState(() => storage.get("level", null));
   const [knownWords, setKnownWords] = useState(() => storage.get("knownWords", []));
