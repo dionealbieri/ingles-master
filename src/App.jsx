@@ -327,6 +327,7 @@ export default function App() {
             {tab === "conversation" && <motion.div key="conv"     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><ConversationMode level={level} theme={t} /></motion.div>}
             {tab === "dictionary"   && <motion.div key="dict"     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><Dictionary theme={t} /></motion.div>}
             {tab === "progress"     && <motion.div key="prog"     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><ProgressReport streak={streak} xp={xp} completed={completedLessons} words={knownWords} level={currentLevel} history={history} cards={cards} onReset={handleLogout} theme={t} /></motion.div>}
+            {tab === "settings"    && <motion.div key="settings" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><Settings settings={settings} onUpdate={updateSetting} onReset={resetSettings} theme={t} /></motion.div>}
           </AnimatePresence>
         </main>
       </div>
