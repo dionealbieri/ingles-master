@@ -44,7 +44,7 @@ function falarNavegador(text, lang) {
     window.speechSynthesis.cancel();
     setTimeout(() => {
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = lang; u.rate = 0.82; u.pitch = 1; u.volume = 1;
+      u.lang = lang; u.rate = 0.65; u.pitch = 1; u.volume = 1;
       const voices = window.speechSynthesis.getVoices();
       const code = lang.split("-")[0];
       const v = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(code)) || voices[0];
